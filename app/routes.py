@@ -1,6 +1,11 @@
-from flask import Blueprint, jsonify
+from flask import Blueprint, current_app, jsonify, request
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from .models import User, db
+import requests
 
 main = Blueprint('main', __name__)
+
 
 @main.route('/')
 def home():
