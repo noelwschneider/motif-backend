@@ -37,6 +37,3 @@ htmlcov/
 # System-specific files
 .DS_Store
 Thumbs.db
-
-# Sensitive
-config.py
