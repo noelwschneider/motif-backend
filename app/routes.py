@@ -53,3 +53,32 @@ def protected():
     current_user = get_jwt_identity()
     return jsonify({'message': f'Welcome, {current_user["username"]}!'}), 200
 
+
+@auth.route('/spotify-login', methods=['GET'])
+def spotify_login():
+    auth_url = (
+        f"https://accounts.spotify.com/authorize"
+        f"?response_type=code"
+        f"&client_id={current_app.config['SPOTIFY_CLIENT_ID']}"
+        f"&redirect_uri={current_app.config['SPOTIFY_REDIRECT_URI']}"
+        f"&scope=user-read-email"
+    )
+    return jsonify({'auth_url': auth_url}), 200
+
+
+@auth.route('/callback', methods=['GET'])
+def spotify_callback():
+    code = request.args.get('code')
+
+    token_url = 'https://accounts.spotify.com/api/token'
+    token_data = {
+        'grant_type': 'authorization_code',
+        'code': code,
+        'redirect_uri': current_app.config['SPOTIFY_REDIRECT_URI'],
+        'client_id': current_app.config['SPOTIFY_CLIENT_ID'],
+        'client_secret': current_app.config['SPOTIFY_CLIENT_SECRET'],
+    }
+    response = requests.post(token_url, data=token_data)
+    token_info = response.json()
+
+    return jsonify({'token_info': token_info}), 200
