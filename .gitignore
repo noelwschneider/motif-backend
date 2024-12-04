@@ -1,0 +1,42 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+.venv/
+.env
+
+# Flask configuration files
+instance/
+*.env
+
+# Database files
+*.sqlite3
+*.db
+*.sql
+
+# Log files
+logs/
+*.log
+
+# Pytest cache and coverage
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# IDE-specific files
+.vscode/
+.idea/
+*.swp
+
+# System-specific files
+.DS_Store
+Thumbs.db
+
+# Sensitive
+config.py
