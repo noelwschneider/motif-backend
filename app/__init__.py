@@ -12,16 +12,44 @@ migrate = Migrate()
 
 def create_app():
     app = Flask(__name__)
-    CORS(app)
+
+    # todo: update resources for different environments
+    CORS(
+        app,
+        supports_credentials=True,
+        resources={r"/*": {"origins": "http://localhost:5173"}}
+    )
+
     app.config.from_object('config.Config')
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
 
+    @app.after_request
+    def apply_security_headers(response):
+        response.headers['Content-Security-Policy'] = (
+            "default-src 'self'; "
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; "
+            "font-src 'self'; "
+            "object-src 'none'; "
+            "frame-ancestors 'none';"
+        )
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        response.headers['Access-Control-Allow-Origin'] = 'http://localhost:5173'
+        response.headers['Access-Control-Allow-Credentials'] = 'true'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS, PUT, DELETE'
+        return response
+
     with app.app_context():
         from . import models, routes
         app.register_blueprint(routes.main)
-        app.register_blueprint(routes.auth)
+        app.register_blueprint(routes.auth, url_prefix="/auth")
         db.create_all()
 
     return app

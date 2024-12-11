@@ -1,6 +1,6 @@
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, current_app, jsonify, make_response, redirect, request
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import create_access_token, create_refresh_token, get_jwt_identity, jwt_required
 from .models import User, db
 import requests
 
@@ -43,15 +43,48 @@ def login():
     if not user or not check_password_hash(user.password_hash, password):
         return jsonify({'error': 'Invalid credentials'}), 401
 
-    access_token = create_access_token(identity={'id': user.id, 'username': user.username})
-    return jsonify({'access_token': access_token}), 200
+    response = make_response(jsonify({'message': 'Login successful'}), 200)
+
+    access_token = create_access_token(identity=str(user.id))
+    refresh_token = create_refresh_token(identity=str(user.id))
+
+    # todo: environment-based cookie config
+    # samesite = 'None' if current_app.config['ENV'] == 'development' else 'Lax'
+    # secure = False if current_app.config['ENV'] == 'development' else True
+    # response.set_cookie('access_token', access_token, httponly=True, secure=secure, samesite=samesite)
+    # response.set_cookie('refresh_token', refresh_token, httponly=True, secure=secure, samesite=samesite)
+
+    response.set_cookie('access_token_cookie', access_token, httponly=True, secure=True, samesite='None')
+    response.set_cookie('refresh_token_cookie', refresh_token, httponly=True, secure=True, samesite='None')
+    return response
 
 
-@auth.route('/protected', methods=['GET'])
-@jwt_required()
-def protected():
+@auth.route('/refresh', methods=['POST'])
+@jwt_required(refresh=True)
+def refresh():
     current_user = get_jwt_identity()
-    return jsonify({'message': f'Welcome, {current_user["username"]}!'}), 200
+    new_access_token = create_access_token(identity=current_user)
+    new_refresh_token = create_refresh_token(identity=current_user)
+
+    response = jsonify({'message': 'Token refreshed'})
+    response.set_cookie('access_token_cookie', new_access_token, httponly=True, secure=True, samesite='None')
+    response.set_cookie('refresh_token_cookie', new_refresh_token, httponly=True, secure=True, samesite='None')
+    return response
+
+
+@auth.route('/logout', methods=['POST'])
+def logout():
+    response = make_response(jsonify({'message': 'Logged out successfully'}), 200)
+    response.delete_cookie('access_token_cookie', httponly=True, secure=True, samesite='None')
+    response.delete_cookie('refresh_token_cookie', httponly=True, secure=True, samesite='None')
+    return response
+
+
+@auth.route('/verify', methods=['GET'])
+@jwt_required()
+def verify():
+    current_user = get_jwt_identity()
+    return jsonify({'authenticated': True, 'user': current_user}), 200
 
 
 @auth.route('/spotify-login', methods=['GET'])
@@ -63,7 +96,8 @@ def spotify_login():
         f"&redirect_uri={current_app.config['SPOTIFY_REDIRECT_URI']}"
         f"&scope=user-read-email"
     )
-    return jsonify({'auth_url': auth_url}), 200
+    # return jsonify({'auth_url': auth_url}), 200
+    return redirect(auth_url)
 
 
 @auth.route('/callback', methods=['GET'])
