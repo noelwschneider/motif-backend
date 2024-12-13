@@ -81,7 +81,7 @@ def get_valid_access_token(user):
     return user.spotify_access_token
 
 
-@spotify.route('/user-profile', methods=['GET'])
+@spotify.route('/user', methods=['GET'])
 @jwt_required()
 def get_user_profile():
     user_id = get_jwt_identity()
