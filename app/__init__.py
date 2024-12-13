@@ -4,7 +4,6 @@ from flask_jwt_extended import JWTManager
 from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 
-
 db = SQLAlchemy()
 jwt = JWTManager()
 migrate = Migrate()
@@ -47,9 +46,7 @@ def create_app():
         return response
 
     with app.app_context():
-        from . import models, routes
-        app.register_blueprint(routes.main)
-        app.register_blueprint(routes.auth, url_prefix="/auth")
-        db.create_all()
+        from .api._api import register_apis
+        register_apis(app)
 
     return app
