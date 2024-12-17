@@ -9,7 +9,8 @@ class User(db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     spotify_refresh_token = db.Column(db.String(512), nullable=True)
     spotify_access_token = db.Column(db.String(512), nullable=True)
-    spotify_token_expires = db.Column(db.DateTime, nullable=True)
+    spotify_token_expires = db.Column(db.DateTime(timezone=True), nullable=True)
+
 
 
 class Album(db.Model):
