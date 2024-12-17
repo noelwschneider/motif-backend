@@ -97,3 +97,36 @@ def get_user_profile():
     headers = {'Authorization': f'Bearer {access_token}'}
     response = requests.get('https://api.spotify.com/v1/me', headers=headers)
     return response.json(), response.status_code
+
+
+@spotify.route('/search', methods=['GET'])
+@jwt_required()
+def search_spotify():
+    if not request.args.get('q'):
+        return jsonify({'error': 'Search query parameter "q" is required'}), 400
+
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    try:
+        access_token = get_valid_access_token(user)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+    response = requests.get(
+        'https://api.spotify.com/v1/search', 
+        headers={'Authorization': f'Bearer {access_token}'},
+        params={
+            'q': request.args.get('q'),
+            'type': request.args.get('type'),
+            'limit': int(request.args.get('limit')),
+            'offset': int(request.args.get('offset')),
+        }
+    )
+
+    if response.status_code != 200:
+        return jsonify({'error': 'Failed to fetch data from Spotify', 'details': response.json()}), response.status_code
+
+    return jsonify(response.json()), 200
