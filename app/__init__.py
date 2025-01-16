@@ -16,7 +16,7 @@ def create_app():
     CORS(
         app,
         supports_credentials=True,
-        resources={r"/*": {"origins": "http://localhost:5173"}}
+        resources={r"/*": {"origins": "http://127.0.0.1:5173"}}
     )
 
     app.config.from_object('config.Config')
@@ -39,9 +39,9 @@ def create_app():
         response.headers['X-Frame-Options'] = 'DENY'
         response.headers['X-XSS-Protection'] = '1; mode=block'
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-        response.headers['Access-Control-Allow-Origin'] = 'http://localhost:5173'
+        response.headers['Access-Control-Allow-Origin'] = 'http://127.0.0.1:5173'
         response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-CSRF-TOKEN'
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS, PUT, DELETE'
         return response
 

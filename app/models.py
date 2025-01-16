@@ -1,4 +1,12 @@
 from . import db
+from datetime import datetime, timezone
+from enum import Enum
+
+
+class CatalogItemType(Enum):
+    ALBUM = 'album'
+    ARTIST = 'artist'
+    SONG = 'song'
 
 
 track_artist = db.Table(
@@ -52,6 +60,35 @@ class Artist(db.Model):
     tracks = db.relationship('Track', secondary=track_artist, back_populates='artists')
 
 
+class Catalog(db.Model):
+    __tablename__ = 'catalogs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    name = db.Column(db.String(80), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    private = db.Column(db.Boolean, default=False, nullable=False)
+    created_date = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_date = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+
+    user = db.relationship('User', backref='catalogs', lazy=True)
+    items = db.relationship('CatalogItem', back_populates='catalog', cascade='all, delete-orphan')
+
+
+class CatalogItem(db.Model):
+    __tablename__ = 'catalog_items'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    catalog_id = db.Column(db.Integer, db.ForeignKey('catalogs.id', ondelete='CASCADE'), nullable=False)
+    item_id = db.Column(db.Integer, nullable=False)
+    item_type = db.Column(db.Enum(CatalogItemType, name="catalog_item_type_enum"), nullable=False)
+    date_added = db.Column(db.DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    position = db.Column(db.Integer, nullable=True)
+    notes = db.Column(db.Text, nullable=True)
+
+    catalog = db.relationship('Catalog', back_populates='items')
+
+
 class Track(db.Model):
     __tablename__ = 'tracks'
     id = db.Column(db.Integer, primary_key=True)
@@ -76,11 +113,3 @@ class Review(db.Model):
     album_id = db.Column(db.Integer, db.ForeignKey('albums.id'), nullable=False)
     rating = db.Column(db.Integer, nullable=False)
     content = db.Column(db.Text, nullable=True)
-
-
-class List(db.Model):
-    __tablename__ = 'lists'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(80), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    description = db.Column(db.Text, nullable=True)
