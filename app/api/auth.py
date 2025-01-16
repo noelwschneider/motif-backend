@@ -41,16 +41,6 @@ def login():
     return response
 
 
-@auth.route('/refresh', methods=['POST'])
-@jwt_required(refresh=True)
-def refresh():
-    current_user = get_jwt_identity()
-    response = jsonify({'message': 'Token refreshed'})
-    response = set_user_cookies(response, current_user)
-
-    return response
-
-
 @auth.route('/logout', methods=['POST'])
 def logout():
     response = make_response(jsonify({'message': 'Logged out successfully'}), 200)

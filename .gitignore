@@ -37,3 +37,6 @@ htmlcov/
 # System-specific files
 .DS_Store
 Thumbs.db
+
+# Local documentation
+_dev/
