@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app.models import db, Catalog, CatalogItem, CatalogItemType
+from app.models import db, Catalog, CatalogItem, MusicItemType
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime
 
@@ -18,7 +18,7 @@ def create_catalog():
 
     name = data.get("name")
     description = data.get("description", "")
-    private = data.get("isPrivate", False)
+    private = data.get("private", False)
 
     if not name:
         return jsonify({"error": "Catalog name is required"}), 400
@@ -121,6 +121,7 @@ def delete_catalog(catalog_id):
     return jsonify({"message": "Catalog deleted successfully"}), 200
 
 
+# todo: trigger side effect for checking/populating related rows in artists, albums, tracks, and artist_album_track tables
 @catalogs.route("/<int:catalog_id>/items", methods=["POST"])
 @jwt_required()
 def add_item_to_catalog(catalog_id):
@@ -138,11 +139,12 @@ def add_item_to_catalog(catalog_id):
     if not item_id or not item_type:
         return jsonify({"error": "item_id and item_type are required"}), 400
 
+
     try:
         item = CatalogItem(
             catalog_id=catalog.id,
             item_id=item_id,
-            item_type=CatalogItemType(item_type),
+            item_type=MusicItemType(item_type),
             position=position,
             notes=notes
         )
