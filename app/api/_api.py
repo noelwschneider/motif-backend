@@ -10,6 +10,9 @@ def register_apis(app):
     from .catalogs import catalogs
     api.register_blueprint(catalogs, url_prefix="/catalogs")
 
+    from .reviews import reviews
+    api.register_blueprint(reviews, url_prefix='/reviews')
+
     from .spotify import spotify
     api.register_blueprint(spotify, url_prefix='/spotify')
 
