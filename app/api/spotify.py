@@ -1,12 +1,18 @@
 from flask import Blueprint, current_app, jsonify, redirect, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app.models import User
+from app.models import Review, User
 from app import db
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
+from sqlalchemy import case, desc
 import requests
 
 spotify = Blueprint('spotify', __name__)
 
+
+# todo:
+# use public token for search/artist-profile endpoints
+# clean up fetch_artist_albums
 
 @spotify.route('/login', methods=['GET'])
 @jwt_required()
@@ -116,7 +122,7 @@ def search_spotify():
         return jsonify({'error': str(e)}), 400
 
     response = requests.get(
-        'https://api.spotify.com/v1/search', 
+        'https://api.spotify.com/v1/search',
         headers={'Authorization': f'Bearer {access_token}'},
         params={
             'q': request.args.get('q'),
@@ -130,3 +136,128 @@ def search_spotify():
         return jsonify({'error': 'Failed to fetch data from Spotify', 'details': response.json()}), response.status_code
 
     return jsonify(response.json()), 200
+
+
+@spotify.route('/artist-profile', methods=['GET'])
+@jwt_required()
+def fetch_artist_albums():
+    if not request.args.get('id'):
+        return jsonify({'error': 'Artist ID parameter "id" is required'}), 400
+    spotify_artist_id = request.args.get('id')
+
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    try:
+        access_token = get_valid_access_token(user)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+    # reviews
+    sorted_reviews_query = (
+        Review.query.filter_by(spotify_artist_id=spotify_artist_id, private=False)
+        .order_by(
+            case((Review.user_id == user_id, 1), else_=0).desc(),
+            desc(Review.upvotes),
+            desc(Review.created_date)
+        )
+    )
+    print('\n')
+    print('after reviews query')
+    reviews = defaultdict(list)
+    for review in sorted_reviews_query:
+        reviews[review.spotify_id].append({
+            "spotifyId": review.spotify_id,
+            "reviewId": review.id,
+            "userId": review.user_id,
+            "comment": review.comment,
+            "rating": review.rating,
+            "createdDate": review.created_date,
+            "upvotes": review.upvotes,
+        })
+    print('after dict iteration')
+    reviews_dict = dict(reviews)
+    print('after reviews dict')
+    print('\n')
+
+    # artist data
+    response = requests.get(
+        f'https://api.spotify.com/v1/artists/{request.args.get('id')}',
+        headers={'Authorization': f'Bearer {access_token}'},
+    )
+    if response.status_code != 200:
+        return jsonify({'error': 'Failed to fetch data from Spotify', 'details': response.json()}), response.status_code
+    else:
+        artist_response = response.json()
+
+    # artist albums
+    response = requests.get(
+        f'https://api.spotify.com/v1/artists/{request.args.get('id')}/albums',
+        headers={'Authorization': f'Bearer {access_token}'},
+        params={
+            'include_groups': 'album',
+            'market': 'US',
+            'limit': 50,
+            'offset': 0
+        }
+    )
+    if response.status_code != 200:
+        return jsonify({'error': 'Failed to fetch data from Spotify', 'details': response.json()}), response.status_code
+    else:
+        artist_albums_response = response.json()
+
+    # albums (w/ track data)
+    album_id_str = ''
+    count = 0
+    for item in artist_albums_response.get("items", []):
+        if count >= 20:
+            break
+        count += 1
+        album_id_str += f'{item.get('id')},'
+    response = requests.get(
+        'https://api.spotify.com/v1/albums',
+        headers={'Authorization': f'Bearer {access_token}'},
+        params={
+            'ids': album_id_str,
+            'market': 'US'
+        }
+    )
+
+    if response.status_code != 200:
+        return jsonify({'error': 'Failed to fetch data from Spotify', 'details': response.json()}), response.status_code
+    else:
+        albums_response = response.json()
+    albums = []
+    for album in albums_response.get('albums'):
+        tracks = []
+        for track in album.get('tracks', {}).get('items', []):
+            tracks.append({
+                'title': track.get('name'),
+                'spotifyId': track.get('id'),
+                'durationMs': track.get('duration_ms'),
+                'discNumber': track.get('disc_number'),
+                'trackNumber': track.get('track_number'),
+                'explicit': track.get('explicit'),
+                'isPlayable': track.get('is_playable')
+            })
+        albums.append({
+            'title': album.get('name'),
+            'spotifyId': album.get('id'),
+            'releaseDate': album.get('release_date'),
+            'popularity': album.get('popularity'),
+            'images': album.get('images'),
+            'tracks': tracks
+        })
+
+    artist_profile = {
+        'title': artist_response.get('name'),
+        'popularity': artist_response.get('popularity'),
+        'spotifyId': artist_response.get('id'),
+        'images': artist_response.get('images'),
+        "albums": albums,
+        "reviews": reviews_dict
+    }
+
+    return jsonify(artist_profile), 200
