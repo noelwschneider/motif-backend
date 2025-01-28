@@ -5,6 +5,7 @@ from app import db
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import case, desc
+import base64
 import requests
 
 spotify = Blueprint('spotify', __name__)
@@ -13,6 +14,54 @@ spotify = Blueprint('spotify', __name__)
 # todo:
 # use public token for search/artist-profile endpoints
 # clean up fetch_artist_albums
+
+
+def get_spotify_access_token(user):
+    if user.spotify_token_expires and datetime.now(timezone.utc) < user.spotify_token_expires:
+        return user.spotify_access_token
+
+    token_url = 'https://accounts.spotify.com/api/token'
+    client_id = current_app.config['SPOTIFY_CLIENT_ID']
+    client_secret = current_app.config['SPOTIFY_CLIENT_SECRET']
+
+    if user.id == -1:
+        token_data = {
+            'grant_type': 'client_credentials',
+        }
+        auth_str = base64.b64encode(f'{client_id}:{client_secret}'.encode('utf-8'))
+        auth_str = auth_str.decode('utf-8')
+        headers = {
+            'Authorization': f'Basic {auth_str}',
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+    else:
+        token_data = {
+            'grant_type': 'refresh_token',
+            'refresh_token': user.spotify_refresh_token,
+            'client_id': client_id,
+            'client_secret': client_secret,
+        }
+        headers = {}
+
+    response = requests.post(token_url, data=token_data, headers=headers)
+    token_info = response.json()
+
+    if response.status_code != 200:
+        raise Exception('Failed to refresh Spotify token')
+
+    user.spotify_access_token = token_info.get('access_token')
+    user.spotify_token_expires = datetime.now(timezone.utc) + timedelta(seconds=token_info.get('expires_in', 3600))
+    db.session.commit()
+
+    return user.spotify_access_token
+
+
+def get_global_access_token():
+    user = User.query.get(-1)
+    access_token = get_spotify_access_token(user)
+    print('\naccess_token:', access_token, '\n')
+    return access_token
+
 
 @spotify.route('/login', methods=['GET'])
 @jwt_required()
@@ -30,6 +79,7 @@ def spotify_login():
 @spotify.route('/callback', methods=['GET'])
 @jwt_required()
 def spotify_callback():
+    print('\nin spotify_callback\n')
     code = request.args.get('code')
     if not code:
         return jsonify({'error': 'Authorization code missing'}), 400
@@ -62,31 +112,6 @@ def spotify_callback():
     return jsonify({'message': 'Spotify tokens saved successfully'}), 200
 
 
-def get_valid_access_token(user):
-    if user.spotify_token_expires and datetime.now(timezone.utc) < user.spotify_token_expires:
-        return user.spotify_access_token
-
-    token_url = 'https://accounts.spotify.com/api/token'
-    token_data = {
-        'grant_type': 'refresh_token',
-        'refresh_token': user.spotify_refresh_token,
-        'client_id': current_app.config['SPOTIFY_CLIENT_ID'],
-        'client_secret': current_app.config['SPOTIFY_CLIENT_SECRET'],
-    }
-
-    response = requests.post(token_url, data=token_data)
-    token_info = response.json()
-
-    if response.status_code != 200:
-        raise Exception('Failed to refresh Spotify token')
-
-    user.spotify_access_token = token_info.get('access_token')
-    user.spotify_token_expires = datetime.now(timezone.utc) + timedelta(seconds=token_info.get('expires_in', 3600))
-    db.session.commit()
-
-    return user.spotify_access_token
-
-
 @spotify.route('/user', methods=['GET'])
 @jwt_required()
 def get_user_profile():
@@ -96,7 +121,7 @@ def get_user_profile():
         return jsonify({'error': 'User not found'}), 404
 
     try:
-        access_token = get_valid_access_token(user)
+        access_token = get_spotify_access_token(user)
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
@@ -106,18 +131,18 @@ def get_user_profile():
 
 
 @spotify.route('/search', methods=['GET'])
-@jwt_required()
 def search_spotify():
     if not request.args.get('q'):
         return jsonify({'error': 'Search query parameter "q" is required'}), 400
 
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
+    # user_id = get_jwt_identity()
+    # user = User.query.get(user_id)
+    # if not user:
+    #     return jsonify({'error': 'User not found'}), 404
 
     try:
-        access_token = get_valid_access_token(user)
+        # access_token = get_spotify_access_token(user)
+        access_token = get_global_access_token()
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
@@ -133,25 +158,100 @@ def search_spotify():
     )
 
     if response.status_code != 200:
-        return jsonify({'error': 'Failed to fetch data from Spotify', 'details': response.json()}), response.status_code
+        return jsonify({'error': 'Failed to fetch search data from Spotify', 'details': response.json()}), response.status_code
 
-    return jsonify(response.json()), 200
+    response_json = response.json()
+
+    search_results = {
+        'metadata': {
+            'offset': request.args.get('offset'),
+            'limit': request.args.get('limit'),
+            'q': request.args.get('q'),
+            'type': request.args.get('q'),
+            'count': {
+                'albums': response_json.get('albums', {}).get('total'),
+                'artists': response_json.get('artists', {}).get('total'),
+                'tracks': response_json.get('tracks', {}).get('total'),
+            }
+        },
+        'albums': [],
+        'artists': [],
+        'tracks': [],
+    }
+
+    for album in response_json.get('albums', {}).get('items', []):
+        artists_list = []
+        for artist in album.get('artists', []):
+            artist_obj = {
+                "spotifyId": artist.get('id'),
+                "title": artist.get('name'),
+            }
+            artists_list.append(artist_obj)
+
+        album_obj = {
+            'spotifyId': album.get('id'),
+            'title': album.get('name'),
+            'images': album.get('images', []),
+            'releaseDate': album.get('release_date'),
+            'tracksCount': album.get('total_tracks'),
+            'albumType': album.get('album_type'),
+            'artists': artists_list
+        }
+        search_results['albums'].append(album_obj)
+
+    for artist in response_json.get('artists', {}).get('items', []):
+        artist_obj = {
+            'spotifyId': artist.get('id'),
+            'title': artist.get('name'),
+            'images': artist.get('images'),
+            'popularity': artist.get('popularity'),
+            'genres': artist.get('genres', [])
+        }
+        search_results['artists'].append(artist_obj)
+
+    for track in response_json.get('tracks', {}).get('items', []):
+        album = track.get('album', {})
+        artists_list = []
+        for artist in track.get('artists', []):
+            artist_obj = {
+                "spotifyId": artist.get('id'),
+                "title": artist.get('name'),
+            }
+            artists_list.append(artist_obj)
+
+        track_obj = {
+            'spotifyId': track.get('id'),
+            'title': track.get('name'),
+            'durationMs': track.get('duration_ms'),
+            'popularity': track.get('popularity'),
+            'images': album.get('images', []),
+            'releaseDate': album.get('release_date'),
+            'album': {
+                'title': album.get('name'),
+                'spotifyId': album.get('id'),
+                'albumType': album.get('album_type')
+            },
+            'artists': artists_list
+        }
+        search_results['tracks'].append(track_obj)
+
+    return jsonify(search_results), 200
 
 
 @spotify.route('/artist-profile', methods=['GET'])
-@jwt_required()
 def fetch_artist_albums():
     if not request.args.get('id'):
         return jsonify({'error': 'Artist ID parameter "id" is required'}), 400
     spotify_artist_id = request.args.get('id')
 
-    user_id = get_jwt_identity()
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
+    # user_id = get_jwt_identity() or -1
+    # user = User.query.get(user_id)
+    # if not user:
+        # return jsonify({'error': 'User not found'}), 404
 
     try:
-        access_token = get_valid_access_token(user)
+        # access_token = get_spotify_access_token(user)
+        access_token = get_global_access_token()
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
@@ -159,13 +259,12 @@ def fetch_artist_albums():
     sorted_reviews_query = (
         Review.query.filter_by(spotify_artist_id=spotify_artist_id, private=False)
         .order_by(
-            case((Review.user_id == user_id, 1), else_=0).desc(),
+            # case((Review.user_id == user_id, 1), else_=0).desc(),
             desc(Review.upvotes),
             desc(Review.created_date)
         )
     )
-    print('\n')
-    print('after reviews query')
+
     reviews = defaultdict(list)
     for review in sorted_reviews_query:
         reviews[review.spotify_id].append({
@@ -177,10 +276,7 @@ def fetch_artist_albums():
             "createdDate": review.created_date,
             "upvotes": review.upvotes,
         })
-    print('after dict iteration')
     reviews_dict = dict(reviews)
-    print('after reviews dict')
-    print('\n')
 
     # artist data
     response = requests.get(
@@ -188,7 +284,7 @@ def fetch_artist_albums():
         headers={'Authorization': f'Bearer {access_token}'},
     )
     if response.status_code != 200:
-        return jsonify({'error': 'Failed to fetch data from Spotify', 'details': response.json()}), response.status_code
+        return jsonify({'error': 'Failed to fetch artist data from Spotify', 'details': response.json()}), response.status_code
     else:
         artist_response = response.json()
 
@@ -204,7 +300,7 @@ def fetch_artist_albums():
         }
     )
     if response.status_code != 200:
-        return jsonify({'error': 'Failed to fetch data from Spotify', 'details': response.json()}), response.status_code
+        return jsonify({'error': 'Failed to fetch artist albums data from Spotify', 'details': response.json()}), response.status_code
     else:
         artist_albums_response = response.json()
 
@@ -216,21 +312,27 @@ def fetch_artist_albums():
             break
         count += 1
         album_id_str += f'{item.get('id')},'
-    response = requests.get(
-        'https://api.spotify.com/v1/albums',
-        headers={'Authorization': f'Bearer {access_token}'},
-        params={
-            'ids': album_id_str,
-            'market': 'US'
-        }
-    )
+    album_id_str = album_id_str[:-1]
+    # todo: prepare multiple requests if items > 20
+    if album_id_str:
+        response = requests.get(
+            'https://api.spotify.com/v1/albums',
+            headers={'Authorization': f'Bearer {access_token}'},
+            params={
+                'ids': album_id_str,
+                'market': 'US'
+            }
+        )
 
-    if response.status_code != 200:
-        return jsonify({'error': 'Failed to fetch data from Spotify', 'details': response.json()}), response.status_code
+        if response.status_code != 200:
+            return jsonify({'error': 'Failed to fetch albums data from Spotify', 'details': response.json()}), response.status_code
+        else:
+            albums_response = response.json()
     else:
-        albums_response = response.json()
+        albums_response = {'albums': []}
+
     albums = []
-    for album in albums_response.get('albums'):
+    for album in albums_response.get('albums', []):
         tracks = []
         for track in album.get('tracks', {}).get('items', []):
             tracks.append({
