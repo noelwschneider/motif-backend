@@ -22,12 +22,11 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
-
+    display_name = db.Column(db.String(80), unique=True, nullable=True)
+    profile_pic_url = db.Column(db.String(256), nullable=True)
     spotify_refresh_token = db.Column(db.String(512), nullable=True)
     spotify_access_token = db.Column(db.String(512), nullable=True)
-    spotify_token_expires = db.Column(
-        db.DateTime(timezone=True),
-        nullable=True)
+    spotify_token_expires = db.Column(db.DateTime(timezone=True), nullable=True)
 
 
 class Album(db.Model):
