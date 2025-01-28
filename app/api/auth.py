@@ -35,7 +35,13 @@ def login():
     if not user or not check_password_hash(user.password_hash, password):
         return jsonify({'error': 'Invalid credentials'}), 401
 
-    response = make_response(jsonify({'message': 'Login successful'}), 200)
+    response_data = {
+        "userId": str(user.id),
+        "username": str(user.username),
+        "displayName": str(user.display_name),
+        "profilePicUrl": str(user.profile_pic_url)
+    }
+    response = make_response(jsonify(response_data), 200)
     response = set_user_cookies(response, str(user.id))
 
     return response
@@ -56,8 +62,15 @@ def logout():
 @jwt_required()
 def verify():
     current_user = get_jwt_identity()
+    user = User.query.filter_by(id=current_user).first()
+    response_data = {
+        "userId": str(user.id),
+        "username": str(user.username),
+        "displayName": str(user.display_name),
+        "profilePicUrl": str(user.profile_pic_url)
+    }
 
-    return jsonify({'authenticated': True, 'user': current_user}), 200
+    return jsonify(response_data), 200
 
 
 def set_user_cookies(response, identity):
