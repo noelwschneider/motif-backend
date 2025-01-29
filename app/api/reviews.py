@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app.models import db, Review
+from app.models import db, ArtistAlbumTrack, Review
 from datetime import datetime
 
 reviews = Blueprint("reviews", __name__)
@@ -12,22 +12,31 @@ def create_review():
     user_id = get_jwt_identity()
     data = request.get_json()
 
-    item_id = data.get('item_id')
-    item_type = data.get('item_type')
     rating = data.get('rating')
     comment = data.get('comment')
-    private = data.get('private')
-    artist_id = data.get('artist_id')
+    is_private = data.get('isPrivate')
+    spotify_id = data.get('spotifyId')
+    spotify_artist_id = data.get('spotifyArtistId')
+
+    # todo: check for existing user review
+    existing_review = Review.query.filter_by(user_id=user_id, spotify_id=spotify_id).first()
+    print('existing_review:', existing_review)
+    if existing_review:
+        return jsonify({"message": "User review for this item already exists. Use the PUT endpoint instead."}), 409
 
     review = Review(
         user_id=user_id,
-        item_id=item_id,
-        item_type=item_type,
-        artist_id=artist_id,
-        private=private,
+        is_private=is_private,
         rating=rating,
-        comment=comment
+        comment=comment,
+        spotify_id=spotify_id,
+        spotify_artist_id=spotify_artist_id
     )
+
+    # todo: check artist_album_track for match. If none, fetch the missing data from spotify. (alternative 1: expect the user to send it up w/ the request.) (alternative 2: expect the backend to handle this during whatever request was used to gather the data in the first place)
+    # album_artist_track = ArtistAlbumTrack.query.filter_by(spotify_id=spotify_id)
+    # if not album_artist_track:
+    #     print('todo: fetch the appropriate data from spotify and save it')
 
     db.session.add(review)
     db.session.commit()
@@ -37,7 +46,7 @@ def create_review():
 
 @reviews.route("/", methods=["GET"])
 @jwt_required()
-def get_user_reviews():
+def get_current_user_reviews():
     """
     Fetch all reviews for the logged-in user.
     """
@@ -48,35 +57,16 @@ def get_user_reviews():
     return jsonify([
         {
             "id": review.id,
-            "item_id": review.item_id,
-            "item_type": review.item_type,
-            "artist_id": review.artist_id,
+            "user_id": review.user_id,
             "rating": review.rating,
             "comment": review.comment,
-            "private": review.private,
+            "isPrivate": review.is_private,
             "created_date": review.created_date.isoformat(),
-            "updated_date": review.updated_date.isoformat()
-        }
-        for review in reviews
-    ]), 200
-
-
-# todo: get all reviews for an artist (+ their albums/tracks)
-@reviews.route("/artist/<int:artist_id>", methods=["GET"])
-def get_artist_reviews(artist_id):
-    reviews = Review.query.filter_by(artist_id=artist_id, private=False).all()
-    # todo: create artist/album/track hierarchy
-    return jsonify([
-        {
-            "id": review.id,
-            "item_id": review.item_id,
-            "item_type": review.item_type,
-            "artist_id": review.artist_id,
-            "rating": review.rating,
-            "comment": review.comment,
-            "private": review.private,
-            "created_date": review.created_date.isoformat(),
-            "updated_date": review.updated_date.isoformat()
+            "updated_date": review.updated_date.isoformat(),
+            "spotify_id": review.spotify_id,
+            "spotify_artist_id": review.spotify_artist_id,
+            "upvotes": review.upvotes,
+            "downvotes": review.downvotes,
         }
         for review in reviews
     ]), 200
@@ -85,15 +75,16 @@ def get_artist_reviews(artist_id):
 @reviews.route("/<int:review_id>", methods=["PUT"])
 @jwt_required()
 def update_review(review_id):
-    """
-    Update an existing review.
-    """
+    user_id = get_jwt_identity()
     review = Review.query.get_or_404(review_id)
+    if str(review.user_id) != user_id:
+        return jsonify({"message": "Invalid credentials for the selected review."}), 401
+
     data = request.get_json()
 
     review.rating = data.get("rating", review.rating)
     review.comment = data.get("comment", review.comment)
-    review.private = data.get("private", review.private)
+    review.is_private = data.get("isPrivate", review.is_private)
     review.updated_date = datetime.now()
 
     db.session.commit()
@@ -104,10 +95,10 @@ def update_review(review_id):
 @reviews.route("/<int:review_id>", methods=["DELETE"])
 @jwt_required()
 def delete_review(review_id):
-    """
-    Delete a review
-    """
+    user_id = get_jwt_identity()
     review = Review.query.get_or_404(review_id)
+    if str(review.user_id) != user_id:
+        return jsonify({"message": "Invalid credentials for the selected review."}), 401
 
     db.session.delete(review)
     db.session.commit()
