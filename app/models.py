@@ -35,7 +35,7 @@ class Album(db.Model):
     __tablename__ = 'albums'
 
     id = db.Column(db.Integer, primary_key=True)
-    spotify_id = db.Column(db.String(128), unique=True, nullable=True)
+    spotify_id = db.Column(db.String(128), unique=True, nullable=True, index=True)
     title = db.Column(db.String(120), nullable=False)
     upc = db.Column(db.String(30), unique=True, nullable=True)
 
@@ -56,7 +56,7 @@ class Album(db.Model):
 class Artist(db.Model):
     __tablename__ = 'artists'
     id = db.Column(db.Integer, primary_key=True)
-    spotify_id = db.Column(db.String(128), unique=True, nullable=True)
+    spotify_id = db.Column(db.String(128), unique=True, nullable=True, index=True)
     title = db.Column(db.String(120), nullable=False)
 
     image_url_640px = db.Column(db.String(512), nullable=True)
@@ -118,27 +118,14 @@ class CatalogItem(db.Model):
     catalog = db.relationship('Catalog', back_populates='items')
 
 
+# todo: track user review history over time
 class Review(db.Model):
     __tablename__ = 'reviews'
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-
-    item_type = db.Column(db.Enum(MusicItemType, name="music_item_type_enum"), nullable=False)
-    # include independent artist_id to facilitate album/track joins
-    artist_id = db.Column(
-        db.Integer,
-        db.ForeignKey('artists.id'),
-        nullable=False)
-    album_id = db.Column(db.Integer, db.ForeignKey('albums.id'), nullable=True)
-    track_id = db.Column(db.Integer, db.ForeignKey('tracks.id'), nullable=True)
-    spotify_id = db.Column(db.String(128), nullable=True)
-    spotify_artist_id = db.Column(db.String(128), nullable=True)
-
-    rating = db.Column(db.Integer, nullable=False)
-    comment = db.Column(db.Text, nullable=True)
-    private = db.Column(db.Boolean, default=False, nullable=False)
-
+    spotify_id = db.Column(db.String(128), nullable=False)
+    spotify_artist_id = db.Column(db.String(128), db.ForeignKey('artists.spotify_id'), nullable=False)
     created_date = db.Column(
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -148,6 +135,9 @@ class Review(db.Model):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False)
+    rating = db.Column(db.Integer, nullable=True)
+    comment = db.Column(db.Text, nullable=True)
+    is_private = db.Column(db.Boolean, default=True)
     upvotes = db.Column(db.Integer, default=0)
     downvotes = db.Column(db.Integer, default=0)
 
@@ -156,7 +146,7 @@ class Track(db.Model):
     __tablename__ = 'tracks'
 
     id = db.Column(db.Integer, primary_key=True)
-    spotify_id = db.Column(db.String(128), unique=True, nullable=True)
+    spotify_id = db.Column(db.String(128), unique=True, nullable=True, index=True)
     isrc = db.Column(db.String(30), unique=True, nullable=True)
     iswc = db.Column(db.String(30), unique=True, nullable=True)
 
@@ -173,5 +163,6 @@ class ArtistAlbumTrack(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     artist_id = db.Column(db.Integer, db.ForeignKey('artists.id'), nullable=False)
-    album_id = db.Column(db.Integer, db.ForeignKey('albums.id'), nullable=False)
+    album_id = db.Column(db.Integer, db.ForeignKey('albums.id'), nullable=True)
     track_id = db.Column(db.Integer, db.ForeignKey('tracks.id'), nullable=True)
+    spotify_id = db.Column(db.String(128), unique=True, nullable=True, index=True)
