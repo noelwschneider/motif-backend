@@ -3,6 +3,8 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models import db, Catalog, CatalogItem, MusicItemType
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime
+from app.util.spotify import validate_item_in_database
+
 
 catalogs = Blueprint("catalogs", __name__)
 
@@ -125,9 +127,6 @@ def delete_catalog(catalog_id):
 @catalogs.route("/<int:catalog_id>/items", methods=["POST"])
 @jwt_required()
 def add_item_to_catalog(catalog_id):
-    """
-    Add an item to a specific catalog.
-    """
     catalog = Catalog.query.get_or_404(catalog_id)
     data = request.get_json()
 

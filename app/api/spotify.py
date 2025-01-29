@@ -4,63 +4,10 @@ from app.models import Review, User
 from app import db
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import case, desc
-import base64
+from sqlalchemy import desc
 import requests
-
+from app.util.spotify import get_user_token, get_client_token
 spotify = Blueprint('spotify', __name__)
-
-
-# todo:
-# use public token for search/artist-profile endpoints
-# clean up fetch_artist_albums
-
-
-def get_spotify_access_token(user):
-    if user.spotify_token_expires and datetime.now(timezone.utc) < user.spotify_token_expires:
-        return user.spotify_access_token
-
-    token_url = 'https://accounts.spotify.com/api/token'
-    client_id = current_app.config['SPOTIFY_CLIENT_ID']
-    client_secret = current_app.config['SPOTIFY_CLIENT_SECRET']
-
-    if user.id == -1:
-        token_data = {
-            'grant_type': 'client_credentials',
-        }
-        auth_str = base64.b64encode(f'{client_id}:{client_secret}'.encode('utf-8'))
-        auth_str = auth_str.decode('utf-8')
-        headers = {
-            'Authorization': f'Basic {auth_str}',
-            'Content-Type': 'application/x-www-form-urlencoded'
-        }
-    else:
-        token_data = {
-            'grant_type': 'refresh_token',
-            'refresh_token': user.spotify_refresh_token,
-            'client_id': client_id,
-            'client_secret': client_secret,
-        }
-        headers = {}
-
-    response = requests.post(token_url, data=token_data, headers=headers)
-    token_info = response.json()
-
-    if response.status_code != 200:
-        raise Exception('Failed to refresh Spotify token')
-
-    user.spotify_access_token = token_info.get('access_token')
-    user.spotify_token_expires = datetime.now(timezone.utc) + timedelta(seconds=token_info.get('expires_in', 3600))
-    db.session.commit()
-
-    return user.spotify_access_token
-
-
-def get_global_access_token():
-    user = User.query.get(-1)
-    access_token = get_spotify_access_token(user)
-    print('\naccess_token:', access_token, '\n')
-    return access_token
 
 
 @spotify.route('/login', methods=['GET'])
@@ -121,7 +68,7 @@ def get_user_profile():
         return jsonify({'error': 'User not found'}), 404
 
     try:
-        access_token = get_spotify_access_token(user)
+        access_token = get_user_token(user)
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
@@ -142,7 +89,7 @@ def search_spotify():
 
     try:
         # access_token = get_spotify_access_token(user)
-        access_token = get_global_access_token()
+        access_token = get_client_token()
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
@@ -251,7 +198,7 @@ def fetch_artist_albums():
 
     try:
         # access_token = get_spotify_access_token(user)
-        access_token = get_global_access_token()
+        access_token = get_client_token()
     except Exception as e:
         return jsonify({'error': str(e)}), 400
 
