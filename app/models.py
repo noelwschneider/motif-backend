@@ -37,16 +37,12 @@ class Album(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     spotify_id = db.Column(db.String(128), unique=True, nullable=True, index=True)
     title = db.Column(db.String(120), nullable=False)
-    upc = db.Column(db.String(30), unique=True, nullable=True)
 
     album_type = db.Column(
         db.Enum("album", "single", "compilation", name="album_type_enum"),
         nullable=False)
-    duration_ms = db.Column(db.Integer, nullable=True)
     total_tracks = db.Column(db.Integer, nullable=True)
     release_date = db.Column(db.Date, nullable=True)
-    explicit = db.Column(db.Boolean, nullable=True)
-    label = db.Column(db.String(120), nullable=True)
 
     image_url_640px = db.Column(db.String(512), nullable=True)
     image_url_300px = db.Column(db.String(512), nullable=True)
@@ -71,8 +67,8 @@ class Catalog(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
 
     name = db.Column(db.String(80), nullable=False)
-    description = db.Column(db.Text, nullable=True)
-    private = db.Column(db.Boolean, default=False, nullable=False)
+    comment = db.Column(db.Text, nullable=True)
+    is_private = db.Column(db.Boolean, default=False, nullable=False)
 
     created_date = db.Column(
         db.DateTime(timezone=True),
@@ -100,19 +96,18 @@ class CatalogItem(db.Model):
         db.Integer,
         db.ForeignKey('catalogs.id', ondelete='CASCADE'),
         nullable=False)
-
-    item_id = db.Column(
-        db.Integer,
-        nullable=False)
-    item_type = db.Column(db.Enum(MusicItemType, name="music_item_type_enum"), nullable=False)
-    spotify_id = db.Column(db.String(128), nullable=True)
-    spotify_artist_id = db.Column(db.String(128), nullable=True)
+    spotify_id = db.Column(db.String(128), nullable=True, index=True)
+    spotify_artist_id = db.Column(db.String(128), db.ForeignKey('artists.spotify_id'), nullable=False)
     position = db.Column(db.Integer, nullable=True)
     comment = db.Column(db.Text, nullable=True)
-
     created_date = db.Column(
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
+        nullable=False)
+    updated_date = db.Column(
+        db.DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
         nullable=False)
 
     catalog = db.relationship('Catalog', back_populates='items')
@@ -147,14 +142,12 @@ class Track(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     spotify_id = db.Column(db.String(128), unique=True, nullable=True, index=True)
-    isrc = db.Column(db.String(30), unique=True, nullable=True)
-    iswc = db.Column(db.String(30), unique=True, nullable=True)
 
     title = db.Column(db.String(120), nullable=False)
     disc_number = db.Column(db.Integer, nullable=True)
     track_order = db.Column(db.Integer, nullable=True)
 
-    duration = db.Column(db.Integer, nullable=True)
+    duration_ms = db.Column(db.Integer, nullable=True)
     explicit = db.Column(db.Boolean, nullable=True)
 
 
