@@ -1,7 +1,9 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app.models import db, ArtistAlbumTrack, Review
+from app.models import db, Review
 from datetime import datetime
+from app.util.spotify import validate_item_in_database
+
 
 reviews = Blueprint("reviews", __name__)
 
@@ -18,9 +20,12 @@ def create_review():
     spotify_id = data.get('spotifyId')
     spotify_artist_id = data.get('spotifyArtistId')
 
-    # todo: check for existing user review
+    try:
+        validate_item_in_database(spotify_id, spotify_artist_id)
+    except Exception as e:
+        return jsonify({'message': 'error validating item in database'}), 500
+
     existing_review = Review.query.filter_by(user_id=user_id, spotify_id=spotify_id).first()
-    print('existing_review:', existing_review)
     if existing_review:
         return jsonify({"message": "User review for this item already exists. Use the PUT endpoint instead."}), 409
 
@@ -32,11 +37,6 @@ def create_review():
         spotify_id=spotify_id,
         spotify_artist_id=spotify_artist_id
     )
-
-    # todo: check artist_album_track for match. If none, fetch the missing data from spotify. (alternative 1: expect the user to send it up w/ the request.) (alternative 2: expect the backend to handle this during whatever request was used to gather the data in the first place)
-    # album_artist_track = ArtistAlbumTrack.query.filter_by(spotify_id=spotify_id)
-    # if not album_artist_track:
-    #     print('todo: fetch the appropriate data from spotify and save it')
 
     db.session.add(review)
     db.session.commit()
