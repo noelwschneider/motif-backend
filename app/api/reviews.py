@@ -76,9 +76,10 @@ def get_current_user_reviews():
 @jwt_required()
 def update_review(review_id):
     user_id = get_jwt_identity()
-    review = Review.query.get_or_404(review_id)
-    if str(review.user_id) != user_id:
-        return jsonify({"message": "Invalid credentials for the selected review."}), 401
+    review = Review.query(id=review_id, user_id=user_id).first()
+
+    if not review:
+        return jsonify({"message": "No matching review found for the current user."}), 404
 
     data = request.get_json()
 

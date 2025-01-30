@@ -69,6 +69,7 @@ class Catalog(db.Model):
     name = db.Column(db.String(80), nullable=False)
     comment = db.Column(db.Text, nullable=True)
     is_private = db.Column(db.Boolean, default=False, nullable=False)
+    image_url = db.Column(db.String(500), nullable=True)
 
     created_date = db.Column(
         db.DateTime(timezone=True),

@@ -26,7 +26,6 @@ def spotify_login():
 @spotify.route('/callback', methods=['GET'])
 @jwt_required()
 def spotify_callback():
-    print('\nin spotify_callback\n')
     code = request.args.get('code')
     if not code:
         return jsonify({'error': 'Authorization code missing'}), 400
