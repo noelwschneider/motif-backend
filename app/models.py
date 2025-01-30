@@ -69,7 +69,7 @@ class Catalog(db.Model):
     name = db.Column(db.String(80), nullable=False)
     comment = db.Column(db.Text, nullable=True)
     is_private = db.Column(db.Boolean, default=False, nullable=False)
-
+    image_url = db.Column(db.String(500), nullable=True)
     created_date = db.Column(
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -98,8 +98,10 @@ class CatalogItem(db.Model):
         nullable=False)
     spotify_id = db.Column(db.String(128), nullable=True, index=True)
     spotify_artist_id = db.Column(db.String(128), db.ForeignKey('artists.spotify_id'), nullable=False)
+
     position = db.Column(db.Integer, nullable=True)
     comment = db.Column(db.Text, nullable=True)
+
     created_date = db.Column(
         db.DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
