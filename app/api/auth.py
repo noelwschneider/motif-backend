@@ -1,8 +1,9 @@
 from flask import Blueprint, jsonify, request, make_response
-from flask_jwt_extended import create_access_token, create_refresh_token, get_csrf_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from werkzeug.security import generate_password_hash, check_password_hash
 from app.models import User
 from app import db
+from app.util.auth import set_user_cookies
 
 auth = Blueprint('auth', __name__)
 
@@ -71,15 +72,3 @@ def verify():
     }
 
     return jsonify(response_data), 200
-
-
-def set_user_cookies(response, identity):
-    new_access_token = create_access_token(identity=identity)
-    new_refresh_token = create_refresh_token(identity=identity)
-
-    response.set_cookie('access_token_cookie', new_access_token, httponly=True, secure=True, samesite='None')
-    response.set_cookie('refresh_token_cookie', new_refresh_token, httponly=True, secure=True, samesite='None')
-    response.set_cookie('csrf_access_token', get_csrf_token(new_access_token), samesite='None', secure=True)
-    response.set_cookie('csrf_refresh_token', get_csrf_token(new_refresh_token), samesite='None', secure=True)
-
-    return response
