@@ -1,10 +1,10 @@
 from flask import Blueprint, current_app, jsonify, redirect, request
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
 from app.models import Catalog, CatalogItem, Review, User
 from app import db
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from sqlalchemy.sql import desc, or_
+from sqlalchemy.sql import desc
 import requests
 from app.util.spotify import get_user_token, get_client_token
 spotify = Blueprint('spotify', __name__)
@@ -81,13 +81,7 @@ def search_spotify():
     if not request.args.get('q'):
         return jsonify({'error': 'Search query parameter "q" is required'}), 400
 
-    # user_id = get_jwt_identity()
-    # user = User.query.get(user_id)
-    # if not user:
-    #     return jsonify({'error': 'User not found'}), 404
-
     try:
-        # access_token = get_spotify_access_token(user)
         access_token = get_client_token()
     except Exception as e:
         return jsonify({'error': str(e)}), 400
@@ -185,8 +179,9 @@ def search_spotify():
 
 
 @spotify.route('/artist-profile', methods=['GET'])
-@jwt_required(optional=True)
-def fetch_artist_albums():
+def fetch_artist_profile():
+    # todo: sort results so user items are at top
+    verify_jwt_in_request()
     user_id = get_jwt_identity()
 
     if not request.args.get('id'):
@@ -204,7 +199,6 @@ def fetch_artist_albums():
             spotify_artist_id=spotify_artist_id,
             is_private=False
         ).order_by(
-            # case((Review.user_id == user_id, 1), else_=0).desc(),
             desc(Review.upvotes),
             desc(Review.created_date)
         )
@@ -235,13 +229,12 @@ def fetch_artist_albums():
             Catalog.comment,
             Catalog.image_url,
             Catalog.name,
-        )
-        .join(Catalog, CatalogItem.catalog_id == Catalog.id)
-        .filter(
+        ).join(
+            Catalog, CatalogItem.catalog_id == Catalog.id
+        ).filter(
             CatalogItem.spotify_artist_id == spotify_artist_id,
-            or_(Catalog.is_private == False, (user_id is not None and Catalog.user_id == user_id))
-        )
-        .order_by(
+            Catalog.is_private == False
+        ).order_by(
             desc(Catalog.upvotes),
             desc(Catalog.created_date)
         )
@@ -252,13 +245,13 @@ def fetch_artist_albums():
             "catalogItemId": catalog.catalog_item_id,
             "catalogItemSpotifyId": catalog.catalog_item_spotify_id,
             "catalogId": catalog.catalog_id,
-            "user_id": catalog.user_id,
+            "userId": catalog.user_id,
             "upvotes": catalog.upvotes,
             "downvotes": catalog.downvotes,
             "createdDate": catalog.created_date,
             "updatedDate": catalog.updated_date,
             "comment": catalog.comment,
-            "image_url": catalog.image_url,
+            "imageUrl": catalog.image_url,
             "name": catalog.name
         })
 
@@ -279,7 +272,6 @@ def fetch_artist_albums():
         f'https://api.spotify.com/v1/artists/{request.args.get('id')}/albums',
         headers={'Authorization': f'Bearer {access_token}'},
         params={
-            'include_groups': 'album',
             'market': 'US',
             'limit': 50,
             'offset': 0
@@ -290,35 +282,28 @@ def fetch_artist_albums():
     else:
         artist_albums_response = response.json()
 
-    # albums (w/ track data)
-    album_id_str = ''
-    count = 0
-    for item in artist_albums_response.get("items", []):
-        if count >= 20:
-            break
-        count += 1
-        album_id_str += f'{item.get('id')},'
-    album_id_str = album_id_str[:-1]
-    # todo: prepare multiple requests if items > 20
-    if album_id_str:
+    album_data = []
+    album_ids = [item.get('id') for item in artist_albums_response.get("items", []) if item.get('id')]
+    for i in range(0, len(album_ids), 20):
+        # spotify limits requests to <=20 ids
+        batch_ids = ','.join(album_ids[i:i+20])
+
         response = requests.get(
             'https://api.spotify.com/v1/albums',
             headers={'Authorization': f'Bearer {access_token}'},
-            params={
-                'ids': album_id_str,
-                'market': 'US'
-            }
+            params={'ids': batch_ids, 'market': 'US'}
         )
 
         if response.status_code != 200:
             return jsonify({'error': 'Failed to fetch albums data from Spotify', 'details': response.json()}), response.status_code
-        else:
-            albums_response = response.json()
-    else:
-        albums_response = {'albums': []}
+
+        albums_response = response.json()
+        album_data.extend(albums_response.get("albums", []))  # Flatten the results
 
     albums = []
-    for album in albums_response.get('albums', []):
+    compilations = []
+    singles = []
+    for album in album_data:
         tracks = []
         for track in album.get('tracks', {}).get('items', []):
             tracks.append({
@@ -330,14 +315,21 @@ def fetch_artist_albums():
                 'explicit': track.get('explicit'),
                 'isPlayable': track.get('is_playable')
             })
-        albums.append({
+        album_obj = {
             'title': album.get('name'),
             'spotifyId': album.get('id'),
+            'albumType': album.get('album_type'),
             'releaseDate': album.get('release_date'),
             'popularity': album.get('popularity'),
             'images': album.get('images'),
             'tracks': tracks
-        })
+        }
+        if album.get("album_type") == 'album':
+            albums.append(album_obj)
+        elif album.get('album_type') == 'compilation':
+            compilations.append(album_obj)
+        elif album.get('album_type') == 'single':
+            singles.append(album_obj)
 
     artist_profile = {
         'title': artist_response.get('name'),
@@ -345,8 +337,10 @@ def fetch_artist_albums():
         'spotifyId': artist_response.get('id'),
         'images': artist_response.get('images'),
         "albums": albums,
+        "compilations": compilations,
+        "singles": singles,
         "reviews": reviews_dict,
-        "catalogs": catalogs_dict
+        "catalogs": catalogs_dict,
     }
 
     return jsonify(artist_profile), 200
