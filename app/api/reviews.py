@@ -3,9 +3,14 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.models import db, Review
 from datetime import datetime
 from app.util.spotify import validate_item_in_database
+from collections import defaultdict
+from sqlalchemy.sql import desc
 
 
 reviews = Blueprint("reviews", __name__)
+
+
+# todo: upvote / downvote functionality
 
 
 @reviews.route("/", methods=["POST"])
@@ -14,11 +19,11 @@ def create_review():
     user_id = get_jwt_identity()
     data = request.get_json()
 
-    rating = data.get('rating')
     comment = data.get('comment')
     is_private = data.get('isPrivate')
-    spotify_id = data.get('spotifyId')
+    rating = data.get('rating')
     spotify_artist_id = data.get('spotifyArtistId')
+    spotify_id = data.get('spotifyId')
 
     try:
         validate_item_in_database(spotify_id, spotify_artist_id)
@@ -47,26 +52,23 @@ def create_review():
 @reviews.route("/", methods=["GET"])
 @jwt_required()
 def get_current_user_reviews():
-    """
-    Fetch all reviews for the logged-in user.
-    """
     user_id = get_jwt_identity()
 
     reviews = Review.query.filter_by(user_id=user_id).all()
 
     return jsonify([
         {
-            "id": review.id,
-            "user_id": review.user_id,
-            "rating": review.rating,
             "comment": review.comment,
-            "isPrivate": review.is_private,
             "created_date": review.created_date.isoformat(),
-            "updated_date": review.updated_date.isoformat(),
-            "spotify_id": review.spotify_id,
-            "spotify_artist_id": review.spotify_artist_id,
-            "upvotes": review.upvotes,
             "downvotes": review.downvotes,
+            "id": review.id,
+            "isPrivate": review.is_private,
+            "rating": review.rating,
+            "spotify_artist_id": review.spotify_artist_id,
+            "spotify_id": review.spotify_id,
+            "updated_date": review.updated_date.isoformat(),
+            "upvotes": review.upvotes,
+            "user_id": review.user_id,
         }
         for review in reviews
     ]), 200
@@ -105,3 +107,32 @@ def delete_review(review_id):
     db.session.commit()
 
     return jsonify({"message": "Review deleted successfully"}), 200
+
+
+# todo: join on user table for user data
+# todo: sort so user reviews are at the top
+@reviews.route("/artist/<artist_id>", methods=["GET"])
+def get_artist_reviews(artist_id):
+    sorted_reviews_query = (
+        Review.query.filter_by(
+            spotify_artist_id=artist_id,
+            is_private=False
+        ).order_by(
+            desc(Review.upvotes),
+            desc(Review.created_date)
+        )
+    )
+    reviews = defaultdict(list)
+    for review in sorted_reviews_query:
+        reviews[review.spotify_id].append({
+            "spotifyId": review.spotify_id,
+            "reviewId": review.id,
+            "userId": review.user_id,
+            "comment": review.comment,
+            "rating": review.rating,
+            "createdDate": review.created_date,
+            "upvotes": review.upvotes,
+        })
+    reviews_dict = dict(reviews)
+
+    return jsonify(reviews_dict), 200
