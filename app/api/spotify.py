@@ -1,12 +1,12 @@
 from flask import Blueprint, current_app, jsonify, redirect, request
-from flask_jwt_extended import jwt_required, get_jwt_identity, verify_jwt_in_request
-from app.models import Catalog, CatalogItem, Review, User
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from app.models import User
 from app import db
-from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from sqlalchemy.sql import desc
 import requests
 from app.util.spotify import get_user_token, get_client_token
+
+
 spotify = Blueprint('spotify', __name__)
 
 
@@ -180,13 +180,9 @@ def search_spotify():
 
 @spotify.route('/artist-profile', methods=['GET'])
 def fetch_artist_profile():
-    # todo: sort results so user items are at top
-    verify_jwt_in_request()
-    user_id = get_jwt_identity()
 
     if not request.args.get('id'):
         return jsonify({'error': 'Artist ID parameter "id" is required'}), 400
-    spotify_artist_id = request.args.get('id')
 
     try:
         access_token = get_client_token()
@@ -194,68 +190,48 @@ def fetch_artist_profile():
         return jsonify({'error': str(e)}), 400
 
     # reviews
-    sorted_reviews_query = (
-        Review.query.filter_by(
-            spotify_artist_id=spotify_artist_id,
-            is_private=False
-        ).order_by(
-            desc(Review.upvotes),
-            desc(Review.created_date)
-        )
-    )
-    reviews = defaultdict(list)
-    for review in sorted_reviews_query:
-        reviews[review.spotify_id].append({
-            "spotifyId": review.spotify_id,
-            "reviewId": review.id,
-            "userId": review.user_id,
-            "comment": review.comment,
-            "rating": review.rating,
-            "createdDate": review.created_date,
-            "upvotes": review.upvotes,
-        })
-    reviews_dict = dict(reviews)
 
-    sorted_catalogs_query = (
-        db.session.query(
-            CatalogItem.id.label("catalog_item_id"),
-            CatalogItem.spotify_id.label("catalog_item_spotify_id"),
-            Catalog.id.label("catalog_id"),
-            Catalog.user_id,
-            Catalog.upvotes,
-            Catalog.downvotes,
-            Catalog.created_date,
-            Catalog.updated_date,
-            Catalog.comment,
-            Catalog.image_url,
-            Catalog.name,
-        ).join(
-            Catalog, CatalogItem.catalog_id == Catalog.id
-        ).filter(
-            CatalogItem.spotify_artist_id == spotify_artist_id,
-            Catalog.is_private == False
-        ).order_by(
-            desc(Catalog.upvotes),
-            desc(Catalog.created_date)
-        )
-    )
-    catalogs = defaultdict(list)
-    for catalog in sorted_catalogs_query:
-        catalogs[catalog.catalog_item_spotify_id].append({
-            "catalogItemId": catalog.catalog_item_id,
-            "catalogItemSpotifyId": catalog.catalog_item_spotify_id,
-            "catalogId": catalog.catalog_id,
-            "userId": catalog.user_id,
-            "upvotes": catalog.upvotes,
-            "downvotes": catalog.downvotes,
-            "createdDate": catalog.created_date,
-            "updatedDate": catalog.updated_date,
-            "comment": catalog.comment,
-            "imageUrl": catalog.image_url,
-            "name": catalog.name
-        })
+    # catalogs
+    # sorted_catalogs_query = (
+    #     db.session.query(
+    #         CatalogItem.id.label("catalog_item_id"),
+    #         CatalogItem.spotify_id.label("catalog_item_spotify_id"),
+    #         Catalog.id.label("catalog_id"),
+    #         Catalog.user_id,
+    #         Catalog.upvotes,
+    #         Catalog.downvotes,
+    #         Catalog.created_date,
+    #         Catalog.updated_date,
+    #         Catalog.comment,
+    #         Catalog.image_url,
+    #         Catalog.name,
+    #     ).join(
+    #         Catalog, CatalogItem.catalog_id == Catalog.id
+    #     ).filter(
+    #         CatalogItem.spotify_artist_id == spotify_artist_id,
+    #         Catalog.is_private == False
+    #     ).order_by(
+    #         desc(Catalog.upvotes),
+    #         desc(Catalog.created_date)
+    #     )
+    # )
+    # catalogs = defaultdict(list)
+    # for catalog in sorted_catalogs_query:
+    #     catalogs[catalog.catalog_item_spotify_id].append({
+    #         "catalogItemId": catalog.catalog_item_id,
+    #         "catalogItemSpotifyId": catalog.catalog_item_spotify_id,
+    #         "catalogId": catalog.catalog_id,
+    #         "userId": catalog.user_id,
+    #         "upvotes": catalog.upvotes,
+    #         "downvotes": catalog.downvotes,
+    #         "createdDate": catalog.created_date,
+    #         "updatedDate": catalog.updated_date,
+    #         "comment": catalog.comment,
+    #         "imageUrl": catalog.image_url,
+    #         "name": catalog.name
+    #     })
 
-    catalogs_dict = dict(catalogs)
+    # catalogs_dict = dict(catalogs)
 
     # artist data
     response = requests.get(
@@ -339,8 +315,6 @@ def fetch_artist_profile():
         "albums": albums,
         "compilations": compilations,
         "singles": singles,
-        "reviews": reviews_dict,
-        "catalogs": catalogs_dict,
     }
 
     return jsonify(artist_profile), 200
