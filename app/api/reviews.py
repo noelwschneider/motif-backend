@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from app.models import db, Review
+from app.models import db, Review, User
 from datetime import datetime
 from app.util.spotify import validate_item_in_database
 from collections import defaultdict
@@ -114,24 +114,39 @@ def delete_review(review_id):
 @reviews.route("/artist/<artist_id>", methods=["GET"])
 def get_artist_reviews(artist_id):
     sorted_reviews_query = (
-        Review.query.filter_by(
-            spotify_artist_id=artist_id,
-            is_private=False
+        db.session.query(
+            Review.id.label("review_id"),
+            Review.spotify_id,
+            Review.user_id,
+            Review.comment,
+            Review.rating,
+            Review.created_date,
+            Review.updated_date,
+            Review.upvotes,
+            User.username,
+            User.display_name,
+        ).join(
+            User, Review.user_id == User.id
+        ).filter(
+            Review.spotify_artist_id == artist_id
         ).order_by(
             desc(Review.upvotes),
-            desc(Review.created_date)
+            desc(Review.created_date),
         )
     )
     reviews = defaultdict(list)
     for review in sorted_reviews_query:
         reviews[review.spotify_id].append({
             "spotifyId": review.spotify_id,
-            "reviewId": review.id,
+            "reviewId": review.review_id,
             "userId": review.user_id,
             "comment": review.comment,
             "rating": review.rating,
             "createdDate": review.created_date,
+            "updatedDate": review.updated_date,
             "upvotes": review.upvotes,
+            "username": review.username,
+            "displayName": review.display_name,
         })
     reviews_dict = dict(reviews)
 
