@@ -300,3 +300,48 @@ def remove_item_from_catalog(item_id):
     db.session.commit()
 
     return jsonify({"message": "Item removed from catalog"}), 200
+
+
+def get_artist_catalogs():
+    print('todo')
+    # catalogs
+    # sorted_catalogs_query = (
+    #     db.session.query(
+    #         CatalogItem.id.label("catalog_item_id"),
+    #         CatalogItem.spotify_id.label("catalog_item_spotify_id"),
+    #         Catalog.id.label("catalog_id"),
+    #         Catalog.user_id,
+    #         Catalog.upvotes,
+    #         Catalog.downvotes,
+    #         Catalog.created_date,
+    #         Catalog.updated_date,
+    #         Catalog.comment,
+    #         Catalog.image_url,
+    #         Catalog.name,
+    #     ).join(
+    #         Catalog, CatalogItem.catalog_id == Catalog.id
+    #     ).filter(
+    #         CatalogItem.spotify_artist_id == spotify_artist_id,
+    #         Catalog.is_private == False
+    #     ).order_by(
+    #         desc(Catalog.upvotes),
+    #         desc(Catalog.created_date)
+    #     )
+    # )
+    # catalogs = defaultdict(list)
+    # for catalog in sorted_catalogs_query:
+    #     catalogs[catalog.catalog_item_spotify_id].append({
+    #         "catalogItemId": catalog.catalog_item_id,
+    #         "catalogItemSpotifyId": catalog.catalog_item_spotify_id,
+    #         "catalogId": catalog.catalog_id,
+    #         "userId": catalog.user_id,
+    #         "upvotes": catalog.upvotes,
+    #         "downvotes": catalog.downvotes,
+    #         "createdDate": catalog.created_date,
+    #         "updatedDate": catalog.updated_date,
+    #         "comment": catalog.comment,
+    #         "imageUrl": catalog.image_url,
+    #         "name": catalog.name
+    #     })
+
+    # catalogs_dict = dict(catalogs)
