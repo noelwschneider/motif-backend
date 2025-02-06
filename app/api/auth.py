@@ -32,12 +32,13 @@ def login():
     email = data.get('email')
     password = data.get('password')
 
+    # todo: username, either instead of or alternative to email
     user = User.query.filter_by(email=email).first()
     if not user or not check_password_hash(user.password_hash, password):
         return jsonify({'error': 'Invalid credentials'}), 401
 
     response_data = {
-        "userId": str(user.id),
+        "userId": user.id,
         "username": str(user.username),
         "displayName": str(user.display_name),
         "profilePicUrl": str(user.profile_pic_url)

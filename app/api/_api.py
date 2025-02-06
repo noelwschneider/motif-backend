@@ -16,4 +16,7 @@ def register_apis(app):
     from .spotify import spotify
     api.register_blueprint(spotify, url_prefix='/spotify')
 
+    from .user import user
+    api.register_blueprint(user, url_prefix='/user')
+
     app.register_blueprint(api)
