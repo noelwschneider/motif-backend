@@ -59,16 +59,16 @@ def get_current_user_reviews():
     return jsonify([
         {
             "comment": review.comment,
-            "created_date": review.created_date.isoformat(),
+            "createdDate": review.created_date.isoformat(),
             "downvotes": review.downvotes,
             "id": review.id,
             "isPrivate": review.is_private,
             "rating": review.rating,
-            "spotify_artist_id": review.spotify_artist_id,
-            "spotify_id": review.spotify_id,
-            "updated_date": review.updated_date.isoformat(),
+            "spotifyArtistId": review.spotify_artist_id,
+            "spotifyId": review.spotify_id,
+            "updatedDate": review.updated_date.isoformat(),
             "upvotes": review.upvotes,
-            "user_id": review.user_id,
+            "userId": review.user_id,
         }
         for review in reviews
     ]), 200
@@ -109,7 +109,6 @@ def delete_review(review_id):
     return jsonify({"message": "Review deleted successfully"}), 200
 
 
-# todo: join on user table for user data
 # todo: sort so user reviews are at the top
 @reviews.route("/artist/<artist_id>", methods=["GET"])
 def get_artist_reviews(artist_id):
@@ -123,12 +122,14 @@ def get_artist_reviews(artist_id):
             Review.created_date,
             Review.updated_date,
             Review.upvotes,
+            Review.is_private,
             User.username,
             User.display_name,
         ).join(
             User, Review.user_id == User.id
         ).filter(
-            Review.spotify_artist_id == artist_id
+            Review.spotify_artist_id == artist_id,
+            Review.is_private is False,
         ).order_by(
             desc(Review.upvotes),
             desc(Review.created_date),
@@ -149,5 +150,48 @@ def get_artist_reviews(artist_id):
             "displayName": review.display_name,
         })
     reviews_dict = dict(reviews)
+    return jsonify(reviews_dict), 200
 
+
+@reviews.route("/user/<user_id>", methods=["GET"])
+def get_user_reviews_public(user_id):
+    sorted_reviews_query = (
+        db.session.query(
+            Review.id.label("review_id"),
+            Review.spotify_id,
+            Review.user_id,
+            Review.comment,
+            Review.rating,
+            Review.created_date,
+            Review.updated_date,
+            Review.upvotes,
+            Review.is_private,
+            User.username,
+            User.display_name,
+        ).join(
+            User, Review.user_id == User.id
+        ).filter(
+            Review.user_id == user_id,
+            Review.is_private is False,
+        ).order_by(
+            desc(Review.created_date),
+        )
+    )
+
+    reviews = defaultdict(list)
+    for review in sorted_reviews_query:
+        reviews[review.spotify_id].append({
+            "spotifyId": review.spotify_id,
+            "reviewId": review.review_id,
+            "userId": review.user_id,
+            "comment": review.comment,
+            "rating": review.rating,
+            "createdDate": review.created_date,
+            "updatedDate": review.updated_date,
+            "upvotes": review.upvotes,
+            "username": review.username,
+            "displayName": review.display_name,
+        })
+
+    reviews_dict = dict(reviews)
     return jsonify(reviews_dict), 200
