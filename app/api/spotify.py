@@ -103,17 +103,7 @@ def search_spotify():
     response_json = response.json()
 
     search_results = {
-        'metadata': {
-            'offset': request.args.get('offset'),
-            'limit': request.args.get('limit'),
-            'q': request.args.get('q'),
-            'type': request.args.get('q'),
-            'count': {
-                'albums': response_json.get('albums', {}).get('total'),
-                'artists': response_json.get('artists', {}).get('total'),
-                'tracks': response_json.get('tracks', {}).get('total'),
-            }
-        },
+        'requestArgs': request.args,
         'albums': [],
         'artists': [],
         'tracks': [],
@@ -256,6 +246,7 @@ def fetch_artist_profile():
             'images': album.get('images'),
             'tracks': tracks
         }
+        # todo: this is the client's problem. simplify the return
         if album.get("album_type") == 'album':
             albums.append(album_obj)
         elif album.get('album_type') == 'compilation':
