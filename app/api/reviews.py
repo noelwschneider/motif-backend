@@ -109,6 +109,7 @@ def delete_review(review_id):
     return jsonify({"message": "Review deleted successfully"}), 200
 
 
+# todo: join on user table for user data
 # todo: sort so user reviews are at the top
 @reviews.route("/artist/<artist_id>", methods=["GET"])
 def get_artist_reviews(artist_id):
@@ -194,4 +195,5 @@ def get_user_reviews_public(user_id):
         })
 
     reviews_dict = dict(reviews)
+    
     return jsonify(reviews_dict), 200
